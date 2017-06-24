@@ -1,0 +1,36 @@
+{
+    "env": {
+        "es6": true
+    },
+    "parserOptions":{
+      "ecmaVersion": 2017,
+      "sourceType": "module"
+    },
+    "rules": {
+      "strict": 2,
+      "no-const-assign": 2,
+      "no-constant-condition": 2,
+      "no-delete-var": 2,
+      "no-dupe-keys": 2,
+      "no-dupe-args": 2,
+      "no-invalid-regexp": 2,
+      "no-spaced-func": 1,
+      "no-undef": 2,
+      "no-undef-init": 2,
+      "no-unreachable": 2,
+      "no-unused-expressions": 2,
+      "no-use-before-define": ["error", { "functions": false, "classes": true }],
+      "no-var": 2,
+      "no-with": 2,
+      "camelcase": 1,
+      "comma-style": [2, "last"],
+      "constructor-super": 0,
+      "curly": [1, "all"],
+      "eqeqeq": 1,
+      "generator-star-spacing": 0,
+      "object-shorthand": 0,
+      "prefer-const": 0,
+      "use-isnan": 2,
+      "valid-typeof": 2
+    }
+  }
