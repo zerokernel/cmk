@@ -6,7 +6,7 @@
 			"task": [
 				["file:read", {"dir": "src", "regular":"^(.*[^\\\\\\/]+)\\.es$"}],
 				["babel:transform", {"plugins": ["transform-es2015-modules-commonjs", "transform-async-to-generator"]}],
-				["file:write", {"dir": "lib", "filename":"$1.js"}]
+				["file:write", {"dir": ".", "filename":"$1.js"}]
 			]
 		}
 	},

@@ -41,8 +41,8 @@ function isString(str,noNull) {
  */
 function isOrder(order) {
 	if (order !== parseInt(order)) {return false;}
-	if (order < -0xFFFFFF) {return false;}
-	if (order > +0xFFFFFF) {return false;}
+	if (order < -0xFFFFFFF) {return false;}
+	if (order > +0xFFFFFFF) {return false;}
 	return true;
 }
 /**
@@ -55,9 +55,8 @@ async function create({title, category, image, description, keyword, label, orde
 	if (!isString(image)) {image = "";}
 	if (!isString(description)) {description = "";}
 	//keyword
-	//label
 	if (!(label = stringArray(label))) {label = [];}
-	if (!isOrder(order)) {order = 0;}
+	if (!isOrder(order)) {order = 10000;}
 	content = await this.getContent(content, category);
 	hide = Boolean(hide);
 	top = Boolean(top);
@@ -82,6 +81,7 @@ async function create({title, category, image, description, keyword, label, orde
 			title: value.title,
 			category: value.category,
 			valid: false,
+			delete: false,
 			createDate: value.createDate,
 			updateDate: value.updateDate,
 			review: value,
@@ -121,6 +121,7 @@ async function set(id, {title, category, image, description, label, order, conte
 	value.valid = true;
 
 
+
 	if (review && (review = await this.getUserId(review))) {
 		value.reviewDate = value.updateDate;
 		if (review === null) {
@@ -133,7 +134,7 @@ async function set(id, {title, category, image, description, label, order, conte
 			review: value,
 		}
 	}
-	let {result} = this.db.update({_id:id, delete:{$ne:2}},{$set:value});
+	let {result} = await this.db.update({_id:id, delete:{$ne:2}},{$set:value});
 	return Boolean(result.ok);
 }
 
@@ -141,7 +142,7 @@ async function set(id, {title, category, image, description, label, order, conte
 /**
  * 删除
  */
-async function remove(id, del = false) {
+async function remove(id, del = true) {
 	if (!(id = getId(id))) {throw new Error("Id必须为24为16进制字符串");}
 
 	if (del === "forever") {
@@ -162,30 +163,29 @@ async function get(id) {
 	return null;
 }
 
-
-
 /**
  * 审核
  */
 async function review(id, review) {
 	if (!(id = getId(id))) {throw new Error("Id必须为24为16进制字符串");}
-	let value = await this.db.find({_id:id},{author:1, review:1}).toArray();
-	if (!value.length) {return false;}
-	value = value[0]
-	let author = value.author;
-	value = value.review;
+	let value;
 	if (review && (review = await this.getUserId(review))) {
+		value = await this.db.find({_id:id},{author:1, review:1}).toArray();
+		if (!value.length) {return false;}
+		value = value[0]
+		let author = value.author;
+		value = value.review;
 		value.reviewDate = new Date();
 		if (review === null) {
 			value.reviewer = author;
 		} else {
 			value.reviewer = review;
 		}
-		value.review = null;
 	} else {
-		value = {review: null};
+		value = {};
 	}
-	let {result} = await this.db.update({_id:id, adopt:null, delete:false}, {$set:value});
+	value.review = null;
+	let {result} = await this.db.update({_id:id, delete:false}, {$set:value});
 	return Boolean(result.ok);
 }
 
@@ -193,7 +193,7 @@ async function review(id, review) {
  * 查询
  */
 async function query({
-	category, delete:del, review, hide, top, content, 
+	content, category, delete:del, review, top, hide, valid,
 	filter, type = 3, order, limit:[from = 0, length = 20] = [],
 }) {
 	let condition = this.condition(content);
@@ -209,11 +209,14 @@ async function query({
 	condition.review = review ? {$ne:null} : null;
 	if (typeof top === "boolean") {condition.top = top;}
 	if (typeof hide === "boolean") {condition.hide = hide;}
+	if (typeof valid === "boolean") {condition.valid = valid;}
 
 	{
 		let filters = new Set(["_id"]);
-		if (filter) {
+		if (filter instanceof Array) {
 			filter = new Set(filter);
+		}
+		if (filter instanceof Set) {
 			if (filter.has("$title")) {filters.add("title"); filter.delete("$title");}
 			if (filter.has("$category")) {filters.add("category"); filter.delete("$category");}
 			if (filter.has("$image")) {filters.add("image"); filter.delete("$image");}
@@ -233,9 +236,22 @@ async function query({
 	let cursor = this.db.find(condition, filter);
 	let ret = [];
 	if (type & 1) {
+		if (order instanceof Array && order.length) {
+			let sort = {};
+			for(let i = 0, l = order.length; i < l; i++) {
+				let o = order[0];
+				if (o[0] === '$') {
+					sort[o.substr(1)] = -1;
+				} else {
+					sort[o] = 1;
+				}
+			}
+			cursor.sort(sort);
+		} else {
+			cursor.sort({order:1, _id:1});
+		}
 		if (from < 0 || from !== parseInt(from) || isNaN(from) || from >0xFFFFFFFF) {from = 0;}
 		if (length <= 0 || length !== parseInt(length) || isNaN(length) || length > 100) {length = 10;}
-		if (order) {cursor.sort(order);}
 		cursor.skip(from).limit(length);
 		ret.push(cursor.toArray().then(rs=>Promise.all(rs.map(r=>info.call(this,r)))));
 	} else {
@@ -272,7 +288,7 @@ async function Filter(filter) {
 	}
 }
 
-export default function cmk(db, {getCategoryId, getCategory, getContent, getUserId, getUser, condition, filter,}) {
+export default function cmk(db, {getCategoryId, getCategory, getContent, getUserId, getUser, condition, filter,} = {}) {
 	if (typeof getCategoryId !== "function") {getCategoryId = x=>x;}
 	if (typeof getCategory !== "function") {getCategory = x=>x;}
 	if (typeof getContent !== "function") {getContent = x=>x;}
