@@ -9,7 +9,39 @@ function getId(id) {
 	if (typeof id !== "string" || id.length!== 24 || id.search(/^[0-9a-f]{24}$/ig)) {return null;}
 	return ObjectId(id);
 }
+const keyfield = ["title", "category", "image", "description", "keyword", "content", "order", "review", "hide", "top", "label"];
 
+async function getFilter(filter) {
+	let filters = new Set(["_id"]);
+	if (filter instanceof Array) {
+		filter = new Set(filter);
+	}
+	if (filter instanceof Set) {
+		keyfield.map(f=>{if (filter.has("$" + f)) {filters.add(f); filter.delete("$" + f);}})
+		(await this.filter([...filter])).map(x=>filters.add(x));
+	}
+	filter = {};
+	[...filters].map(x=>filter[x] = 1);
+	return filter;
+}
+function getSort(order) {
+	if (!(order instanceof Array && order.length)) {return {order:1, _id:1};}
+	let sort = {};
+	order.map(o => {
+		let k = 1;
+		if (o[0] === '#') {
+			o = o.substr(1);
+			k = -1;
+		}
+		if (o[0] === '$') {
+			o = o.substr(1);
+		} else {
+			o = 'content.' + o;
+		}
+		sort[o] = k;
+	})
+	return sort;
+}
 /**
  * 字符串数组
  */
@@ -156,9 +188,10 @@ async function remove(id, del = true) {
 /**
  * 获取
  */
-async function get(id) {
+async function get(id, filter) {
 	if (!(id = getId(id))) {throw new Error("Id必须为24为16进制字符串");}
-	let rs = await this.db.find({_id:id}).toArray();
+	if (filter) {filter = await getFilter(filter)}
+	let rs = await this.db.find({_id:id}, filter).toArray();
 	if (rs.length) {return await info.call(this, rs[0]);}
 	return null;
 }
@@ -169,17 +202,17 @@ async function get(id) {
 async function review(id, review) {
 	if (!(id = getId(id))) {throw new Error("Id必须为24为16进制字符串");}
 	let value;
-	if (review && (review = await this.getUserId(review))) {
-		value = await this.db.find({_id:id},{author:1, review:1}).toArray();
+	if (review) {
+		value = await this.db.find({_id:id}, {author:1, review:1}).toArray();
 		if (!value.length) {return false;}
-		value = value[0]
+		value = value[0];
 		let author = value.author;
 		value = value.review;
 		value.reviewDate = new Date();
-		if (review === null) {
-			value.reviewer = author;
-		} else {
+		if (review = await this.getUserId(review)) {
 			value.reviewer = review;
+		} else {
+			value.reviewer = author;
 		}
 	} else {
 		value = {};
@@ -194,64 +227,29 @@ async function review(id, review) {
  */
 async function query({
 	content, category, delete:del, review, top, hide, valid,
-	filter, type = 3, order, limit:[from = 0, length = 20] = [],
+	filter, type = 3, sort, limit:[from = 0, length = 20] = [],
 }) {
-	let condition = this.condition(content);
+	let condition = await this.condition(content);
 	if (category instanceof Array) {
 		for(let i = 0, l = category.length; i < l; i++) {
 			category[i] = this.getCategoryId(category[i]);
 		}
 		condition.category = {$in:category.filter(x=>x)};
 	}else if (category) {
-		condition.category = getId(category);
+		condition.category = this.getCategoryId(category);
 	}
 	condition.delete = Boolean(del);
 	condition.review = review ? {$ne:null} : null;
 	if (typeof top === "boolean") {condition.top = top;}
 	if (typeof hide === "boolean") {condition.hide = hide;}
 	if (typeof valid === "boolean") {condition.valid = valid;}
-
-	{
-		let filters = new Set(["_id"]);
-		if (filter instanceof Array) {
-			filter = new Set(filter);
-		}
-		if (filter instanceof Set) {
-			if (filter.has("$title")) {filters.add("title"); filter.delete("$title");}
-			if (filter.has("$category")) {filters.add("category"); filter.delete("$category");}
-			if (filter.has("$image")) {filters.add("image"); filter.delete("$image");}
-			if (filter.has("$description")) {filters.add("description"); filter.delete("$description");}
-			if (filter.has("$keyword")) {filters.add("keyword"); filter.delete("$keyword");}
-			if (filter.has("$content")) {filters.add("content"); filter.delete("$content");}
-			if (filter.has("$order")) {filters.add("order"); filter.delete("$order");}
-			if (filter.has("$review")) {filters.add("review"); filter.delete("$review");}
-			if (filter.has("$hide")) {filters.add("hide"); filter.delete("$hide");}
-			if (filter.has("$top")) {filters.add("top"); filter.delete("$top");}
-			if (filter.has("$label")) {filters.add("label"); filter.delete("$label");}
-			this.filter([...filter]).map(x=>filters.add(x));
-		}
-		filter = {};
-		[...filters].map(x=>filter[x] = 1);
-	}
+	filter = await getFilter(filter);
 	let cursor = this.db.find(condition, filter);
 	let ret = [];
 	if (type & 1) {
-		if (order instanceof Array && order.length) {
-			let sort = {};
-			for(let i = 0, l = order.length; i < l; i++) {
-				let o = order[0];
-				if (o[0] === '$') {
-					sort[o.substr(1)] = -1;
-				} else {
-					sort[o] = 1;
-				}
-			}
-			cursor.sort(sort);
-		} else {
-			cursor.sort({order:1, _id:1});
-		}
+		cursor.sort(getSort(sort));
 		if (from < 0 || from !== parseInt(from) || isNaN(from) || from >0xFFFFFFFF) {from = 0;}
-		if (length <= 0 || length !== parseInt(length) || isNaN(length) || length > 100) {length = 10;}
+		if (length <= 0 || length !== parseInt(length) || isNaN(length) || length > 1000) {length = 10;}
 		cursor.skip(from).limit(length);
 		ret.push(cursor.toArray().then(rs=>Promise.all(rs.map(r=>info.call(this,r)))));
 	} else {
@@ -282,13 +280,14 @@ async function Condition(condition) {
 
 async function Filter(filter) {
 	try {
-		return (await this(filter)).map(x=>"content." + x);
+		return (await this(filter.filter(x=>x[0]!="$"))).map(x=>"content." + x);
 	} catch(e) {
 		return [];
 	}
 }
 
 export default function cmk(db, {getCategoryId, getCategory, getContent, getUserId, getUser, condition, filter,} = {}) {
+	if (!(db instanceof Collection)) {throw "不是有效的Mongodb Collection";}
 	if (typeof getCategoryId !== "function") {getCategoryId = x=>x;}
 	if (typeof getCategory !== "function") {getCategory = x=>x;}
 	if (typeof getContent !== "function") {getContent = x=>x;}
@@ -297,13 +296,12 @@ export default function cmk(db, {getCategoryId, getCategory, getContent, getUser
 
 	let ret = {};
 	let cfg = Object.create(ret);
-	if (!(db instanceof Collection)) {throw "不是有效的Mongodb Collection";}
 	cfg.db				= db;
-	cfg.getCategoryId	= getCategoryId;
-	cfg.getCategory		= getCategory;
-	cfg.getContent		= getContent;
-	cfg.getUserId		= getUserId;
-	cfg.getUser			= getUser;
+	cfg.getCategoryId	= getCategoryId.bind(ret);
+	cfg.getCategory		= getCategory.bind(ret);
+	cfg.getContent		= getContent.bind(ret);
+	cfg.getUserId		= getUserId.bind(ret);
+	cfg.getUser			= getUser.bind(ret);
 	cfg.condition		= Condition.bind(condition);
 	cfg.filter			= Filter.bind(filter);
 
