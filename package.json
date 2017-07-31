@@ -1,6 +1,6 @@
 {
   "name": "cmk",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Content Management Kernel",
   "main": "lib/index.js",
   "scripts": {

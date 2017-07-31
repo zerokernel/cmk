@@ -9,7 +9,10 @@ function getId(id) {
 	if (typeof id !== "string" || id.length!== 24 || id.search(/^[0-9a-f]{24}$/ig)) {return null;}
 	return ObjectId(id);
 }
-const keyfield = ["title", "category", "image", "description", "keyword", "content", "order", "review", "hide", "top", "label"];
+const keyfield = ["title", "category", "image", "description", "keyword", "content",
+	"order", "review", "hide", "top", "label",
+	"createDate", "reviewDate", "updateDate", "reviewer", "author",
+];
 
 async function getFilter(filter) {
 	let filters = new Set(["_id"]);
@@ -17,7 +20,7 @@ async function getFilter(filter) {
 		filter = new Set(filter);
 	}
 	if (filter instanceof Set) {
-		keyfield.map(f=>{if (filter.has("$" + f)) {filters.add(f); filter.delete("$" + f);}})
+		keyfield.map(f=>{if (filter.has("$" + f)) {filters.add(f); filter.delete("$" + f);}});
 		(await this.filter([...filter])).map(x=>filters.add(x));
 	}
 	filter = {};
@@ -232,34 +235,28 @@ async function query({
 	let condition = await this.condition(content);
 	if (category instanceof Array) {
 		for(let i = 0, l = category.length; i < l; i++) {
-			category[i] = this.getCategoryId(category[i]);
+			category[i] = await this.getCategoryId(category[i]);
 		}
 		condition.category = {$in:category.filter(x=>x)};
 	}else if (category) {
-		condition.category = this.getCategoryId(category);
+		condition.category = await this.getCategoryId(category);
 	}
 	condition.delete = Boolean(del);
 	condition.review = review ? {$ne:null} : null;
 	if (typeof top === "boolean") {condition.top = top;}
 	if (typeof hide === "boolean") {condition.hide = hide;}
 	if (typeof valid === "boolean") {condition.valid = valid;}
-	filter = await getFilter(filter);
+	console.log(filter);
+	filter = await getFilter.call(this, filter);
 	let cursor = this.db.find(condition, filter);
+	console.log(filter);
 	let ret = [];
-	if (type & 1) {
-		cursor.sort(getSort(sort));
-		if (from < 0 || from !== parseInt(from) || isNaN(from) || from >0xFFFFFFFF) {from = 0;}
-		if (length <= 0 || length !== parseInt(length) || isNaN(length) || length > 1000) {length = 10;}
-		cursor.skip(from).limit(length);
-		ret.push(cursor.toArray().then(rs=>Promise.all(rs.map(r=>info.call(this,r)))));
-	} else {
-		ret.push(null);
-	}
-	if (type & 2) {
-		ret.push(cursor.count());
-	} else {
-		ret.push(null);
-	}
+	cursor.sort(getSort(sort));
+	if (from < 0 || from !== parseInt(from) || isNaN(from) || from >0xFFFFFFFF) {from = 0;}
+	if (length <= 0 || length !== parseInt(length) || isNaN(length) || length > 1000) {length = 10;}
+	cursor.skip(from).limit(length);
+	ret.push(cursor.toArray().then(rs=>Promise.all(rs.map(r=>info.call(this,r)))));
+	ret.push(cursor.count());
 	let [list, num] = await Promise.all(ret);
 	return {list, num};
 }
