@@ -234,12 +234,9 @@ async function query({
 }) {
 	let condition = await this.condition(content);
 	if (category instanceof Array) {
-		for(let i = 0, l = category.length; i < l; i++) {
-			category[i] = await this.getCategoryId(category[i]);
-		}
-		condition.category = {$in:category.filter(x=>x)};
-	}else if (category) {
-		condition.category = await this.getCategoryId(category);
+		condition.category = {$in:(await Promise.all(category.map(c=>this.getCategoryId(c)))).filter(x=>x)};
+	}else if (category && (category = await this.getCategoryId(category))) {
+		condition.category = category;
 	}
 	condition.delete = Boolean(del);
 	condition.review = review ? {$ne:null} : null;
@@ -255,10 +252,10 @@ async function query({
 	if (from < 0 || from !== parseInt(from) || isNaN(from) || from >0xFFFFFFFF) {from = 0;}
 	if (length <= 0 || length !== parseInt(length) || isNaN(length) || length > 1000) {length = 10;}
 	cursor.skip(from).limit(length);
-	ret.push(cursor.toArray().then(rs=>Promise.all(rs.map(r=>info.call(this,r)))));
-	ret.push(cursor.count());
-	let [list, num] = await Promise.all(ret);
-	return {list, num};
+	let list = cursor.toArray().then(rs=>Promise.all(rs.map(r=>info.call(this,r))));
+	let total = cursor.count();
+	([list, total] = await Promise.all([list, total]));
+	return {list, total};
 }
 
 async function Condition(condition) {
