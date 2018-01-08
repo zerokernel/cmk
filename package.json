@@ -1,18 +1,14 @@
 {
   "name": "cmk",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "description": "Content Management Kernel",
   "main": "lib/index.js",
+  "engines": {
+    "node": ">=8.9.0"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node ./test/test.js"
   },
   "author": "wangchenxunum<wangchenxunum@qq.com>",
-  "license": "MIT",
-  "dependencies": {
-    "mongodb": "^2.2.29"
-  },
-  "devDependencies": {
-    "babel-plugin-transform-async-to-generator": "^6.24.1",
-    "babel-plugin-transform-es2015-modules-commonjs": "^6.24.1"
-  }
+  "license": "MIT"
 }
