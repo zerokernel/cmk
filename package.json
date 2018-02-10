@@ -1,6 +1,6 @@
 {
   "name": "cmk",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "description": "Content Management Kernel",
   "main": "lib/index.js",
   "engines": {
@@ -10,5 +10,8 @@
     "test": "node ./test/test.js"
   },
   "author": "wangchenxunum<wangchenxunum@qq.com>",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "mongodb": "^3.0.2"
+  }
 }
